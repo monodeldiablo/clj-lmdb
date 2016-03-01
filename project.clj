@@ -1,5 +1,5 @@
 (defproject clj-lmdb "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
+  :description "Clojure bindings for lmdb"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
