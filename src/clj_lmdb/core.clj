@@ -60,3 +60,12 @@
       (.get db
             (Constants/bytes k))))))
 
+(defn delete!
+  ([k]
+   (.delete *txn*
+            (Constants/bytes k)))
+
+  ([db-record k]
+   (let [db (:db db-record)]
+    (.delete db
+             (Constants/bytes k)))))
