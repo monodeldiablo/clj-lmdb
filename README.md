@@ -1,10 +1,10 @@
 # clj-lmdb
 
-Clojure wrappers for lmdb.
+Clojure wrappers for lmdb - the best no-nonsense, no-surprise, fast key-value store.
 
 ## Usage
 
-FIXME
+
 
 ## License
 
