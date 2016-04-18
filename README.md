@@ -10,24 +10,24 @@ TODO: ADD LEIN COORDINATES
 
 `make-db`
 
-	```clojure
-	(use 'clj-lmdb.core :reload)
-	nil
-	user> (def db (make-db "/tmp"))
-    #'user/db
-	```
+```clojure
+(use 'clj-lmdb.core :reload)
+nil
+user> (def db (make-db "/tmp"))
+#'user/db
+```
 
 ### Inserting/Retrieving Values
 
 `get!` and `put!`
 
-	```clojure
-	user> (put! db "foo" "bar")
-	nil
-	user> (get! db "foo")
-	"bar"
-	user> 
-	```
+```clojure
+user> (put! db "foo" "bar")
+nil
+user> (get! db "foo")
+"bar"
+user> 
+```
 
 ### Deleting Values
 
@@ -49,24 +49,24 @@ user>
 
 This inserts a couple of entries:
 
-	```clojure
-	(with-write-txn db
-      (put! "foo"
-            "bar")
-      (put! "foo1"
-            "bar1"))
-	```
+```clojure
+(with-write-txn db
+  (put! "foo"
+        "bar")
+  (put! "foo1"
+        "bar1"))
+```
 
 This retrieves them
 
-	```clojure
-	(with-read-txn db
-      (= (get! "foo")
-         "bar") ; true
+```clojure
+(with-read-txn db
+  (= (get! "foo")
+           "bar") ; true
 
-      (= (get! "foo1")
-         "bar1")) ; true
-	```
+  (= (get! "foo1")
+           "bar1")) ; true
+```
 
 ### Iterating through entries:
 
