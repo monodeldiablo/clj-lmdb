@@ -1,6 +1,6 @@
 # clj-lmdb
 
-[![Circle CI](https://circleci.com/gh/shriphani/clj-lmdb.svg?style=shield&circle-token=351e60b226583e6e24fece5d35f03fbb4f50d3bc)](https://circleci.com/gh/shriphani/clj-lmdb)
+[![Circle CI](https://circleci.com/gh/shriphani/clj-lmdb.svg?style=shield&circle-token=3ac09ef4532f9b7665baad776d399bcc58873338)](https://circleci.com/gh/shriphani/clj-lmdb)
 
 Clojure wrappers for lmdb - the best no-nonsense, no-surprise, fast key-value store.
 
