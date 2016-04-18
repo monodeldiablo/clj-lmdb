@@ -6,7 +6,8 @@ Clojure wrappers for lmdb - the best no-nonsense, no-surprise, fast key-value st
 
 ## Usage
 
-TODO: ADD LEIN COORDINATES
+
+[![Clojars Project](https://img.shields.io/clojars/v/clj-lmdb.svg)](https://clojars.org/clj-lmdb)
 
 ### Creating a database
 
