@@ -93,7 +93,9 @@ to iterate over the entries or to iterate from a particular key onwards.
     (items-from db "foo")))))
 ```
 
-### LICENSE
+For more examples, see the [tests](test/clj_lmdb/core_test.clj)
+
+## LICENSE
 
 Copyright © 2016 Shriphani Palakodety
 
