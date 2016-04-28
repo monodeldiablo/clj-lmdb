@@ -1,51 +1,9 @@
 (ns clj-lmdb.core
-  (:refer-clojure :exclude [get]) ; suppress the shadowing warning
-  (:require [clojure.core :as core])
-  (:import [org.fusesource.lmdbjni Database Env]
+  (:require [clojure.core :as core]
+            [clj-lmdb.specs :refer :all])
+  (:import [clj_lmdb.specs Txn DB]
+           [org.fusesource.lmdbjni Database Env]
            [org.fusesource.lmdbjni Constants]))
-
-(declare ^:dynamic *txn*)
-(declare ^:dynamic *db*)
-
-(defprotocol LMDB
-  "A simple protocol for getters and setters
-  w/ LBDB"
-  (get-env [this])
-  (get-db [this])
-  (items [this])
-  (items-from [this from]))
-
-(deftype DB [env db]
-
-  LMDB
-  (get-env [this] env)
-  
-  (get-db [this] db)
-  
-  (items [this]
-    (let [entries (-> *db*
-                      (.iterate *txn*)
-                      iterator-seq)]
-      (map
-       (fn [e]
-         (let [k (.getKey e)
-               v (.getValue e)]
-           [(Constants/string k)
-            (Constants/string v)]))
-       entries)))
-  
-  (items-from [this from]
-    (let [entries (-> *db*
-                      (.seek *txn*
-                             (Constants/bytes from))
-                      iterator-seq)]
-      (map
-       (fn [e]
-         (let [k (.getKey e)
-               v (.getValue e)]
-           [(Constants/string k)
-            (Constants/string v)]))
-       entries))))
 
 (defn make-db
   [dir-path]
@@ -53,36 +11,46 @@
         db  (.openDatabase env)]
    (DB. env db)))
 
-(defmacro with-write-txn
-  [db-record & body]
-  `(let [db-record# ~db-record
-         env# (get-env db-record#)
-         db#  (get-db db-record#)
+(defn read-txn
+  [db-record]
+  (let [env (get-env db-record)
+        txn (.createReadTransaction env)]
+    (Txn. txn :read)))
 
-         txn# (.createWriteTransaction env#)]
-     (binding [*db*  db#
-               *txn* txn#]
-      ~@body)
-     (.commit txn#)))
+(defn write-txn
+  [db-record]
+  (let [env (get-env db-record)
+        txn (.createWriteTransaction env)]
+    (Txn. txn :write)))
 
-(defmacro with-read-txn
-  [db-record & body]
-  `(let [db-record# ~db-record
-         env# (get-env db-record#)
-         db#  (get-db db-record#)
-
-         txn# (.createReadTransaction env#)]
-     (binding [*txn* txn#
-               *db*  db#]
-       ~@body)
-     (.abort txn#)))
+(defmacro with-txn
+  [bindings & body]
+  (cond
+    (= (count bindings) 0) `(do ~@body)
+    (symbol? (bindings 0)) `(let ~(subvec bindings 0 2)
+                              (try
+                                (with-txn ~(subvec bindings 2)
+                                  ~@body)
+                                (finally
+                                  (if (-> ~(bindings 0)
+                                          :type
+                                          (= :read))
+                                    (-> ~(bindings 0)
+                                        :txn
+                                        (.abort))
+                                    (-> ~(bindings 0)
+                                        :txn
+                                        (.commit))))))
+    :else (throw (IllegalArgumentException.
+                  "with-open only allows Symbols in bindings"))))
 
 (defn put!
-  ([k v]
-   (.put *db*
-         *txn*
-         (Constants/bytes k)
-         (Constants/bytes v)))
+  ([db-record txn k v]
+   (let [db (get-db db-record)]
+     (.put db
+           (:txn txn)
+           (Constants/bytes k)
+           (Constants/bytes v))))
 
   ([db-record k v]
    (let [db (get-db db-record)]
@@ -91,11 +59,12 @@
            (Constants/bytes v)))))
 
 (defn get!
-  ([k]
-   (Constants/string
-    (.get *db*
-          *txn*
-          (Constants/bytes k))))
+  ([db-record txn k]
+   (let [db (get-db db-record)]
+     (Constants/string
+      (.get db
+            (:txn txn)
+            (Constants/bytes k)))))
   
   ([db-record k]
    (let [db (get-db db-record)]
@@ -104,10 +73,11 @@
             (Constants/bytes k))))))
 
 (defn delete!
-  ([k]
-   (.delete *db*
-            *txn*
-            (Constants/bytes k)))
+  ([db-record txn k]
+   (let [db (get-db db-record)]
+     (.delete db
+              (:txn txn)
+              (Constants/bytes k))))
 
   ([db-record k]
    (let [db (get-db db-record)]
