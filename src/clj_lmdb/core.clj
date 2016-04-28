@@ -13,13 +13,13 @@
 
 (defn read-txn
   [db-record]
-  (let [env (get-env db-record)
+  (let [env (:env db-record)
         txn (.createReadTransaction env)]
     (Txn. txn :read)))
 
 (defn write-txn
   [db-record]
-  (let [env (get-env db-record)
+  (let [env (:env db-record)
         txn (.createWriteTransaction env)]
     (Txn. txn :write)))
 
@@ -46,48 +46,48 @@
 
 (defn put!
   ([db-record txn k v]
-   (let [db (get-db db-record)]
+   (let [db (:db db-record)]
      (.put db
            (:txn txn)
            (Constants/bytes k)
            (Constants/bytes v))))
 
   ([db-record k v]
-   (let [db (get-db db-record)]
+   (let [db (:db db-record)]
      (.put db
            (Constants/bytes k)
            (Constants/bytes v)))))
 
 (defn get!
   ([db-record txn k]
-   (let [db (get-db db-record)]
+   (let [db (:db db-record)]
      (Constants/string
       (.get db
             (:txn txn)
             (Constants/bytes k)))))
   
   ([db-record k]
-   (let [db (get-db db-record)]
+   (let [db (:db db-record)]
      (Constants/string
       (.get db
             (Constants/bytes k))))))
 
 (defn delete!
   ([db-record txn k]
-   (let [db (get-db db-record)]
+   (let [db (:db db-record)]
      (.delete db
               (:txn txn)
               (Constants/bytes k))))
 
   ([db-record k]
-   (let [db (get-db db-record)]
+   (let [db (:db db-record)]
     (.delete db
              (Constants/bytes k)))))
 
 
 (defn items
   [db-record txn]
-  (let [db   (get-db db-record)
+  (let [db   (:db db-record)
         txn* (:txn txn)
         
         entries (-> db
@@ -103,7 +103,7 @@
 
 (defn items-from
   [db-record txn from]
-  (let [db   (get-db db-record)
+  (let [db   (:db db-record)
         txn* (:txn txn)
         
         entries (-> db
