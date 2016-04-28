@@ -1,9 +1,10 @@
 (ns clj-lmdb.core
-  (:require [clojure.core :as core]
-            [clj-lmdb.specs :refer :all])
-  (:import [clj_lmdb.specs Txn DB]
-           [org.fusesource.lmdbjni Database Env]
+  (:import [org.fusesource.lmdbjni Database Env]
            [org.fusesource.lmdbjni Constants]))
+
+(defrecord DB [env db])
+
+(defrecord Txn [txn type])
 
 (defn make-db
   [dir-path]
