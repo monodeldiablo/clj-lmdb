@@ -83,3 +83,38 @@
    (let [db (get-db db-record)]
     (.delete db
              (Constants/bytes k)))))
+
+
+(defn items
+  [db-record txn]
+  (let [db   (get-db db-record)
+        txn* (:txn txn)
+        
+        entries (-> db
+                    (.iterate txn*)
+                    iterator-seq)]
+    (map
+     (fn [e]
+       (let [k (.getKey e)
+             v (.getValue e)]
+         [(Constants/string k)
+          (Constants/string v)]))
+     entries)))
+
+(defn items-from
+  [db-record txn from]
+  (let [db   (get-db db-record)
+        txn* (:txn txn)
+        
+        entries (-> db
+                    (.seek txn*
+                           (Constants/bytes from))
+                    iterator-seq)]
+    (map
+     (fn [e]
+       (let [k (.getKey e)
+             v (.getValue e)]
+         [(Constants/string k)
+          (Constants/string v)]))
+     entries)))
+ 

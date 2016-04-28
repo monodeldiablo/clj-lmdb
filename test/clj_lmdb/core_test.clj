@@ -22,17 +22,25 @@
 (deftest with-txn-test
   (testing "Results with a txn"
     (let [db (make-db "/tmp")]
-      (with-write-txn db
-        (put! "foo"
+      (with-txn [txn (write-txn db)]
+        (put! db
+              txn
+              "foo"
               "bar")
-        (put! "foo1"
+        (put! db
+              txn
+              "foo1"
               "bar1"))
 
-      (with-read-txn db
-        (is (= (get! "foo")
+      (with-txn [txn (read-txn db)]
+        (is (= (get! db
+                     txn
+                     "foo")
                "bar"))
 
-        (is (= (get! "foo1")
+        (is (= (get! db
+                     txn
+                     "foo1")
                "bar1")))
 
       (delete! db "foo")
@@ -41,40 +49,40 @@
 (deftest iteration-test
   (testing "Iteration"
     (let [db (make-db "/tmp")]
-      (with-write-txn db
+      (with-txn [txn (write-txn db)]
         (doall
          (map
           (fn [i]
-            (put! (str i) (str i)))
+            (put! db txn (str i) (str i)))
           (range 1000))))
 
-      (with-read-txn db
+      (with-txn [txn (read-txn db)]
         (let [num-items (count
                          (doall
                           (map
                            (fn [[k v]]
                              (is (= k v))
                              [k v])
-                           (items db))))]
+                           (items db txn))))]
           (is (= num-items 1000))))
 
-      (with-read-txn db
+      (with-txn [txn (read-txn db)]
         (let [num-items (count
                          (doall
                           (map
                            (fn [[k v]]
                              (is (= k v))
                              [k v])
-                           (items-from db "500"))))]
+                           (items-from db txn "500"))))]
           (is (= num-items 553)))) ; items are sorted in alphabetical order - not numerical
 
-      (with-write-txn db
+      (with-txn [txn (write-txn db)]
         (doall
          (map
-          #(-> %
-               str
-               delete!)
+          #(->> %
+                str
+                (delete! db txn))
           (range 1000)))
 
-        (is (= (count (items-from db "400"))
+        (is (= (count (items-from db txn "400"))
                0))))))

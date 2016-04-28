@@ -15,32 +15,6 @@
   LMDB
   (get-env [this] env)
   
-  (get-db [this] db)
-  
-  ;; (items [this]
-  ;;   (let [entries (-> db
-  ;;                     (.iterate *txn*)
-  ;;                     iterator-seq)]
-  ;;     (map
-  ;;      (fn [e]
-  ;;        (let [k (.getKey e)
-  ;;              v (.getValue e)]
-  ;;          [(Constants/string k)
-  ;;           (Constants/string v)]))
-  ;;      entries)))
-  
-  ;; (items-from [this from]
-  ;;   (let [entries (-> *db*
-  ;;                     (.seek *txn*
-  ;;                            (Constants/bytes from))
-  ;;                     iterator-seq)]
-  ;;     (map
-  ;;      (fn [e]
-  ;;        (let [k (.getKey e)
-  ;;              v (.getValue e)]
-  ;;          [(Constants/string k)
-  ;;           (Constants/string v)]))
-  ;;      entries)))
-  )
+  (get-db [this] db))
 
 (defrecord Txn [txn type])
