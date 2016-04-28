@@ -46,29 +46,37 @@ user>
 
 ### Transactions:
 
-`with-read-txn` for read-only transactions
+`read-txn` to create a read-only transaction
 
-`with-write-txn` for transactions that update the db
+`write-txn` to create a transaction that updates the db
 
 This inserts a couple of entries:
 
 ```clojure
-(with-write-txn db
-  (put! "foo"
+(with-txn [txn (write-txn db)]
+  (put! db
+        txn
+        "foo"
         "bar")
-  (put! "foo1"
+  (put! db
+        txn
+        "foo1"
         "bar1"))
 ```
 
 This retrieves them
 
 ```clojure
-(with-read-txn db
-  (= (get! "foo")
-           "bar") ; true
+(with-txn [txn (read-txn db)]
+  (= (get! db
+           txn
+           "foo")
+     "bar") ; true
 
-  (= (get! "foo1")
-           "bar1")) ; true
+  (= (get! db
+           txn
+           "foo1")
+     "bar1")) ; true
 ```
 
 ### Iterating through entries:
@@ -77,23 +85,23 @@ Inside a read-transaction you can use `items` or `items-from`
 to iterate over the entries or to iterate from a particular key onwards.
 
 ```clojure
-(with-read-txn db
+(with-txn [txn (read-txn db)]
  (count
   (doall
    (map
     (fn [[k v]]
       ...)
-    (items db)))))
+    (items db txn)))))
 ```
 
 ```clojure
-(with-read-txn db
+(with-txn [txn (read-txn db)]
  (count
   (doall
    (map
     (fn [[k v]]
       ...)
-    (items-from db "foo")))))
+    (items-from db txn "foo")))))
 ```
 
 For more examples, see the [tests](test/clj_lmdb/core_test.clj)
