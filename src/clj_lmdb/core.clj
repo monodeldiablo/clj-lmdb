@@ -7,10 +7,16 @@
 (defrecord Txn [txn type])
 
 (defn make-db
-  [dir-path]
-  (let [env (Env. dir-path)
-        db  (.openDatabase env)]
-   (DB. env db)))
+  "Initialize a new database, optionally specifying *max-size*, in
+  bytes. By default, the maximum size of the memory map (and thus the
+  database) is 10485760 bytes."
+  ([dir-path max-size]
+   (let [env (doto (Env. dir-path)
+               (.setMapSize max-size))
+         db  (.openDatabase env)]
+     (DB. env db)))
+  ([dir-path]
+   (make-db dir-path 10485760)))
 
 (defn read-txn
   [db-record]
