@@ -14,7 +14,7 @@ Clojure wrappers for lmdb - the best no-nonsense, no-surprise, fast key-value st
 `make-db`
 
 ```clojure
-(use 'clj-lmdb.core :reload)
+(use 'clj-lmdb.simple :reload)
 nil
 user> (def db (make-db "/tmp"))
 #'user/db
@@ -104,7 +104,7 @@ to iterate over the entries or to iterate from a particular key onwards.
     (items-from db txn "foo")))))
 ```
 
-For more examples, see the [tests](test/clj_lmdb/core_test.clj)
+For more examples, see the [tests](test/clj_lmdb/simple_test.clj)
 
 ## LICENSE
 

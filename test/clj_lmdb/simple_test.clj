@@ -1,6 +1,6 @@
-(ns clj-lmdb.core-test
+(ns clj-lmdb.simple-test
   (:require [clojure.test :refer :all]
-            [clj-lmdb.core :refer :all]))
+            [clj-lmdb.simple :refer :all]))
 
 (deftest non-txn-test
   (testing "Put + get without using a txn"
