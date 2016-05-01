@@ -1,6 +1,5 @@
 (ns clj-lmdb.core
-  (:import [org.fusesource.lmdbjni Database Env]
-           [org.fusesource.lmdbjni Constants]))
+  (:import [org.fusesource.lmdbjni Database Env]))
 
 (defrecord DB [env db])
 
@@ -56,72 +55,64 @@
    (let [db (:db db-record)]
      (.put db
            (:txn txn)
-           (Constants/bytes k)
-           (Constants/bytes v))))
+           k
+           v)))
 
   ([db-record k v]
    (let [db (:db db-record)]
      (.put db
-           (Constants/bytes k)
-           (Constants/bytes v)))))
+           k
+           v))))
 
 (defn get!
   ([db-record txn k]
    (let [db (:db db-record)]
-     (Constants/string
-      (.get db
-            (:txn txn)
-            (Constants/bytes k)))))
+     (.get db
+           (:txn txn)
+           k)))
   
   ([db-record k]
    (let [db (:db db-record)]
-     (Constants/string
-      (.get db
-            (Constants/bytes k))))))
+     (.get db
+           k))))
 
 (defn delete!
   ([db-record txn k]
    (let [db (:db db-record)]
      (.delete db
               (:txn txn)
-              (Constants/bytes k))))
+              k)))
 
   ([db-record k]
    (let [db (:db db-record)]
     (.delete db
-             (Constants/bytes k)))))
+             k))))
 
 
 (defn items
   [db-record txn]
   (let [db   (:db db-record)
         txn* (:txn txn)
-        
+
         entries (-> db
                     (.iterate txn*)
                     iterator-seq)]
     (map
      (fn [e]
-       (let [k (.getKey e)
-             v (.getValue e)]
-         [(Constants/string k)
-          (Constants/string v)]))
+       [(.getKey e) (.getValue e)])
      entries)))
 
 (defn items-from
   [db-record txn from]
   (let [db   (:db db-record)
         txn* (:txn txn)
-        
+
         entries (-> db
                     (.seek txn*
-                           (Constants/bytes from))
+                           from)
                     iterator-seq)]
     (map
      (fn [e]
-       (let [k (.getKey e)
-             v (.getValue e)]
-         [(Constants/string k)
-          (Constants/string v)]))
+       [(.getKey e) (.getValue e)])
      entries)))
  
