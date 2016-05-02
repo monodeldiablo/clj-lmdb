@@ -1,32 +1,81 @@
 (ns clj-lmdb.core
-  (:import [org.fusesource.lmdbjni Database Env]))
-
-(defrecord DB [env db])
+  (:import [org.fusesource.lmdbjni Database Env Constants]))
 
 (defrecord Txn [txn type])
 
-(defn make-db
-  "Initialize a new database, optionally specifying *max-size*, in
-  bytes. By default, the maximum size of the memory map (and thus the
-  database) is 10485760 bytes."
-  ([dir-path max-size]
-   (let [env (doto (Env. dir-path)
-               (.setMapSize max-size))
-         db  (.openDatabase env)]
-     (DB. env db)))
-  ([dir-path]
-   (make-db dir-path 10485760)))
+(def env-flags
+  {:read-only Constants/RDONLY})
+
+(def db-flags
+  {:create Constants/CREATE
+   :reverse-key Constants/REVERSEKEY
+   :integer-key Constants/INTEGERKEY
+   :dup-sort Constants/DUPSORT
+   :dup-fixed Constants/DUPFIXED
+   :integer-data Constants/INTEGERDUP
+   :reverse-data Constants/REVERSEDUP})
+
+;; FIXME: add support for custom marshal/unmarshal functions
+(defn env
+  "Initialize a new environment, optionally specifying the following
+  parameters:
+
+  - `:dbs` - a map of database configurations, of the form `{<db name>
+    <vector of flags>}`. The following database config keys are supported:
+    - `:create` - create this database if it doesn't already exist
+    - `:reverse-key` - keys are treated as binary strings and compared
+      in reverse order, from the end of the string to the beginning
+    - `:integer-key` - keys are treated as binary integers in native
+      byte order (note: this setting requires all keys in the database
+      to be the same size)
+    - `:dup-sort` - allow duplicate keys in the database
+    - `:dup-fixed` - indicate that all values will be a fixed size,
+      enabling performance optimizations (note: this may only be used in
+      conjunction with `:dup-sort`)
+    - `:integer-data` - values are treated as binary integers in native
+      byte order (note: this may only be used in conjunction with
+      `:dup-sort`)
+    - `:reverse-data` - values are treated as binary strings and
+      compared in reverse order, from the end of the string to the
+      beginning (note: this may only be used in conjunction with
+      `:dup-sort`)
+  - `:max-size` - the maximum size, in bytes, of the memory map (and,
+    thus, the total size of all the databases within this
+    environment. The default is 10485760 bytes.
+  - `:flags` - A vector of special options for the environment. Currently, only
+    `:read-only` is supported."
+  [dir-path & {:keys [max-size dbs flags]
+               :or {max-size 10485760
+                    dbs []
+                    flags []}}]
+  (let [env (doto (Env.)
+              (.open dir-path
+                     (->> (map env-flags flags)
+                          (apply bit-or 0 0)))
+              (.setMapSize max-size))
+        env-map (:_env env)]
+    (if (> (count dbs) 0)
+      (do
+        (.setMaxDbs (count dbs))
+        (reduce (fn [env-map [db-name config]]
+                  (assoc env-map
+                         db-name
+                         (.openDatabase env
+                                        (name db-name)
+                                        (->> (map db-flags config)
+                                             (apply bit-or 0 0)))))
+                env-map
+                dbs))
+      (assoc env-map :db (.openDatabase env)))))
 
 (defn read-txn
-  [db-record]
-  (let [env (:env db-record)
-        txn (.createReadTransaction env)]
+  [env]
+  (let [txn (.createReadTransaction (:_env env))]
     (Txn. txn :read)))
 
 (defn write-txn
-  [db-record]
-  (let [env (:env db-record)
-        txn (.createWriteTransaction env)]
+  [env]
+  (let [txn (.createWriteTransaction (:_env env))]
     (Txn. txn :write)))
 
 (defmacro with-txn
@@ -51,49 +100,37 @@
                   "with-open only allows Symbols in bindings"))))
 
 (defn put!
-  ([db-record txn k v]
-   (let [db (:db db-record)]
-     (.put db
-           (:txn txn)
-           k
-           v)))
-
-  ([db-record k v]
-   (let [db (:db db-record)]
-     (.put db
-           k
-           v))))
+  ([db txn k v]
+   (.put db
+         (:txn txn)
+         k
+         v))
+  ([db k v]
+   (.put db
+         k
+         v)))
 
 (defn get!
-  ([db-record txn k]
-   (let [db (:db db-record)]
-     (.get db
-           (:txn txn)
-           k)))
-  
-  ([db-record k]
-   (let [db (:db db-record)]
-     (.get db
-           k))))
+  ([db txn k]
+   (.get db
+         (:txn txn)
+         k))
+  ([db k]
+   (.get db
+         k)))
 
 (defn delete!
-  ([db-record txn k]
-   (let [db (:db db-record)]
-     (.delete db
-              (:txn txn)
-              k)))
-
-  ([db-record k]
-   (let [db (:db db-record)]
-    (.delete db
-             k))))
-
+  ([db txn k]
+   (.delete db
+            (:txn txn)
+            k))
+  ([db k]
+   (.delete db
+            k)))
 
 (defn items
-  [db-record txn]
-  (let [db   (:db db-record)
-        txn* (:txn txn)
-
+  [db txn]
+  (let [txn* (:txn txn)
         entries (-> db
                     (.iterate txn*)
                     iterator-seq)]
@@ -103,10 +140,8 @@
      entries)))
 
 (defn items-from
-  [db-record txn from]
-  (let [db   (:db db-record)
-        txn* (:txn txn)
-
+  [db txn from]
+  (let [txn* (:txn txn)
         entries (-> db
                     (.seek txn*
                            from)
@@ -115,4 +150,3 @@
      (fn [e]
        [(.getKey e) (.getValue e)])
      entries)))
- 
