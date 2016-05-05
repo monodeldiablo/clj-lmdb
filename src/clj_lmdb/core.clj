@@ -42,23 +42,32 @@
   - `:max-size` - the maximum size, in bytes, of the memory map (and,
     thus, the total size of all the databases within this
     environment. The default is 10485760 bytes.
+  - `:marshal-fn` - a custom serializer to convert input into a byte
+    string (optional; default serializer only supports strings)
+  - `:unmarshal-fn` - a custom deserializer to convert a byte string back
+    into useful output (optional; default deserializer only supports strings)
   - `:flags` - A vector of special options for the environment. Currently, only
     `:read-only` is supported."
   [dir-path & {:keys [max-size dbs flags]
                :or {max-size 10485760
-                    dbs []
-                    flags []}}]
-  (let [env (doto (Env.)
+                    dbs {}
+                    flags []
+                    marshal-fn Constants/bytes
+                    unmarshal-fn Constants/string}}]
+  (let [num-dbs (long (count dbs))
+        env (doto (Env.)
+              (.setMaxDbs num-dbs)
+              (.setMapSize max-size)
               (.open dir-path
                      (->> (map env-flags flags)
-                          (apply bit-or 0 0)))
-              (.setMapSize max-size))
-        env-map (:_env env)]
-    (if (> (count dbs) 0)
+                          (apply bit-or 0 0))))
+        env-map {:_env env
+                 :_marshal-fn marshal-fn
+                 :_unmarshal-fn unmarshal-fn}]
+    (if (> num-dbs 0)
       (do
-        (.setMaxDbs (count dbs))
-        (reduce (fn [env-map [db-name config]]
-                  (assoc env-map
+        (reduce (fn [e [db-name config]]
+                  (assoc e
                          db-name
                          (.openDatabase env
                                         (name db-name)
@@ -100,53 +109,59 @@
                   "with-open only allows Symbols in bindings"))))
 
 (defn put!
-  ([db txn k v]
-   (.put db
+  ([env db txn k v]
+   (.put (env db)
          (:txn txn)
-         k
-         v))
-  ([db k v]
-   (.put db
-         k
-         v)))
+         ((:_marshal-fn env) k)
+         ((:_marshal-fn env) v)))
+  ([env db k v]
+   (.put (env db)
+         ((:_marshal-fn env) k)
+         ((:_marshal-fn env) v))))
 
 (defn get!
-  ([db txn k]
-   (.get db
-         (:txn txn)
-         k))
-  ([db k]
-   (.get db
-         k)))
+  ([env db txn k]
+   ((:_unmarshal-fn env)
+    (.get (env db)
+          (:txn txn)
+          ((:_marshal-fn env) k))))
+  ([env db k]
+   ((:_unmarshal-fn env)
+    (.get (env db)
+          ((:_marshal-fn env) k)))))
 
 (defn delete!
-  ([db txn k]
-   (.delete db
+  ([env db txn k]
+   (.delete (env db)
             (:txn txn)
-            k))
-  ([db k]
-   (.delete db
-            k)))
+            ((:_marshal-fn env) k)))
+  ([env db k]
+   (.delete (env db)
+            ((:_marshal-fn env) k))))
 
 (defn items
-  [db txn]
+  [env db txn]
   (let [txn* (:txn txn)
-        entries (-> db
+        entries (-> (env db)
                     (.iterate txn*)
-                    iterator-seq)]
+                    iterator-seq)
+        uf (:_unmarshal-fn env)]
     (map
      (fn [e]
-       [(.getKey e) (.getValue e)])
+       [(uf (.getKey e))
+        (uf (.getValue e))])
      entries)))
 
 (defn items-from
-  [db txn from]
+  [env db txn from]
   (let [txn* (:txn txn)
-        entries (-> db
+        entries (-> (env db)
                     (.seek txn*
-                           from)
-                    iterator-seq)]
+                           ((:_marshal-fn env) from))
+                    iterator-seq)
+        uf (:_unmarshal-fn env)]
     (map
      (fn [e]
-       [(.getKey e) (.getValue e)])
+       [(uf (.getKey e))
+        (uf (.getValue e))])
      entries)))
