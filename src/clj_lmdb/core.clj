@@ -48,12 +48,12 @@
     into useful output (optional; default deserializer only supports strings)
   - `:flags` - A vector of special options for the environment. Currently, only
     `:read-only` is supported."
-  [dir-path & {:keys [max-size dbs flags]
+  [dir-path & {:keys [max-size dbs flags marshal-fn unmarshal-fn]
                :or {max-size 10485760
                     dbs {}
                     flags []
-                    marshal-fn Constants/bytes
-                    unmarshal-fn Constants/string}}]
+                    marshal-fn #(Constants/bytes %)
+                    unmarshal-fn #(Constants/string %)}}]
   (let [num-dbs (long (count dbs))
         env (doto (Env.)
               (.setMaxDbs num-dbs)
@@ -110,39 +110,39 @@
 
 (defn put!
   ([env db txn k v]
-   (.put (env db)
+   (.put (get env db)
          (:txn txn)
          ((:_marshal-fn env) k)
          ((:_marshal-fn env) v)))
   ([env db k v]
-   (.put (env db)
+   (.put (get env db)
          ((:_marshal-fn env) k)
          ((:_marshal-fn env) v))))
 
 (defn get!
   ([env db txn k]
    ((:_unmarshal-fn env)
-    (.get (env db)
+    (.get (get env db)
           (:txn txn)
           ((:_marshal-fn env) k))))
   ([env db k]
    ((:_unmarshal-fn env)
-    (.get (env db)
+    (.get (get env db)
           ((:_marshal-fn env) k)))))
 
 (defn delete!
   ([env db txn k]
-   (.delete (env db)
+   (.delete (get env db)
             (:txn txn)
             ((:_marshal-fn env) k)))
   ([env db k]
-   (.delete (env db)
+   (.delete (get env db)
             ((:_marshal-fn env) k))))
 
 (defn items
   [env db txn]
   (let [txn* (:txn txn)
-        entries (-> (env db)
+        entries (-> (get env db)
                     (.iterate txn*)
                     iterator-seq)
         uf (:_unmarshal-fn env)]
@@ -155,7 +155,7 @@
 (defn items-from
   [env db txn from]
   (let [txn* (:txn txn)
-        entries (-> (env db)
+        entries (-> (get env db)
                     (.seek txn*
                            ((:_marshal-fn env) from))
                     iterator-seq)
