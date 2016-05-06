@@ -1,5 +1,6 @@
 (ns clj-lmdb.core
-  (:import [org.fusesource.lmdbjni Database Env Constants SeekOp GetOp]))
+  (:import [org.fusesource.lmdbjni Database Env Constants SeekOp GetOp]
+           [com.google.common.primitives UnsignedBytes SignedBytes]))
 
 (defrecord Txn [txn type])
 
@@ -102,34 +103,47 @@
 
 (defn put!
   ([env db txn k v]
-   (.put (get-in env [db])
+   (.put (get env db)
          (:txn txn)
          k
          v))
   ([env db k v]
-   (.put (get-in env [db])
+   (.put (get env db)
          k
          v)))
 
+(defn delete!
+  ([env db txn k]
+   (.delete (get env db)
+            (:txn txn)
+            k))
+  ([env db k]
+   (.delete (get env db)
+            k)))
+
 (defn get!
   ([env db txn k]
-   (.get (get-in env [db])
+   (.get (get env db)
          (:txn txn)
          k))
   ([env db k]
-   (.get (get-in env [db])
+   (.get (get env db)
          k)))
 
+;; FIXME: Rename this fn. It's got a terrible name.
 ;; TODO: If the DB was created with :dup-fixed, then use GET_MULTIPLE
 ;; and NEXT_MULTIPLE GetOps to speed things up.
 ;; TODO: Wrap this in a lazy-seq.
 (defn get-many
+  "Get all the values corresponding to key `k`. If `db` does not
+  support duplicates, it will return a vector containing a single
+  value if there is an entry for `k`."
   ([env db txn k]
-   (let [cursor (.openCursor (get-in env [db]) (:txn txn))
+   (let [cursor (.openCursor (get env db) (:txn txn))
          this (.seek cursor SeekOp/KEY k)
-         entries (loop [vals [[(.getKey this) (.getValue this)]]]
+         entries (loop [vals [(.getValue this)]]
                    (if-let [n (.get cursor GetOp/NEXT_DUP)]
-                     (recur (conj vals [(.getKey n) (.getValue n)]))
+                     (recur (conj vals (.getValue n)))
                      vals))]
      (.close cursor)
      entries))
@@ -137,21 +151,10 @@
    (with-txn [txn (read-txn env)]
      (get-many env db txn k))))
 
-;; FIXME: fetch all k/v within a range, including dups
-
-(defn delete!
-  ([env db txn k]
-   (.delete (get-in env [db])
-            (:txn txn)
-            k))
-  ([env db k]
-   (.delete (get-in env [db])
-            k)))
-
 (defn items
   [env db txn]
   (let [txn* (:txn txn)
-        entries (-> (get-in env [db])
+        entries (-> (get env db)
                     (.iterate txn*)
                     iterator-seq)]
     (map
@@ -162,7 +165,7 @@
 (defn items-from
   [env db txn from]
   (let [txn* (:txn txn)
-        entries (-> (get-in env [db])
+        entries (-> (get env db)
                     (.seek txn*
                            from)
                     iterator-seq)]
@@ -170,3 +173,22 @@
      (fn [e]
        [(.getKey e) (.getValue e)])
      entries)))
+
+(defn range!
+  "Returns all the [key, value] pairs in the interval [start, end). If
+  `db` supports duplicates, they are included in sorted order."
+  ([env db txn start end]
+   ;; FIXME: make this aware of sort-order directives (e.g. :integer-key)
+   (let [c (UnsignedBytes/lexicographicalComparator)
+         out #(let [buf (java.nio.ByteBuffer/wrap %)]
+                (.getLong buf))]
+     (->> (items-from env db txn start)
+          ;; FIXME: This really doesn't like being lazy in its current
+          ;; form. Transactions are timing out. We should really
+          ;; lazy-cat a series of chunked transactions together, but
+          ;; that'll have to wait.
+          (doall)
+          (take-while #(< (.compare c (first %) end) 0)))))
+  ([env db start end]
+   (with-txn [txn (read-txn env)]
+     (range! env db txn start end))))
