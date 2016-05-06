@@ -1,8 +1,17 @@
 (ns clj-lmdb.simple
-  (:require [clj-lmdb.core :as core]))
+  (:require [clj-lmdb.core :as core])
+  (:import [org.fusesource.lmdbjni Constants]))
 
 (def read-txn core/read-txn)
 (def write-txn core/write-txn)
+
+(defn in
+  [s]
+  (Constants/bytes s))
+
+(defn out
+  [b]
+  (Constants/string b))
 
 (defn make-db
   [path]
@@ -14,26 +23,30 @@
 
 (defn put!
   ([env txn k v]
-   (core/put! env :db txn (str k) (str v)))
+   (core/put! env :db txn (in k) (in v)))
   ([env k v]
-   (core/put! env :db (str k) (str v))))
+   (core/put! env :db (in k) (in v))))
 
 (defn get!
   ([env txn k]
-   (core/get! env :db txn (str k)))
+   (out (core/get! env :db txn (in k))))
   ([env k]
-   (core/get! env :db (str k))))
+   (out (core/get! env :db (in k)))))
 
 (defn delete!
   ([env txn k]
-   (core/delete! env :db txn (str k)))
+   (core/delete! env :db txn (in k)))
   ([env k]
-   (core/delete! env :db (str k))))
+   (core/delete! env :db (in k))))
 
 (defn items
   [env txn]
-  (core/items env :db txn))
+  (->> (core/items env :db txn)
+       (map (fn [[k v]]
+              [(out k) (out v)]))))
 
 (defn items-from
   [env txn from]
-  (core/items-from env :db txn (str from)))
+  (->> (core/items-from env :db txn (in from))
+       (map (fn [[k v]]
+              [(out k) (out v)]))))
