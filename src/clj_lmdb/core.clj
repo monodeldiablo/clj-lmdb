@@ -1,6 +1,6 @@
 (ns clj-lmdb.core
-  (:import [org.fusesource.lmdbjni Database Env Constants SeekOp GetOp]
-           [com.google.common.primitives UnsignedBytes SignedBytes]))
+  (:require [byte-streams :as bs])
+  (:import [org.fusesource.lmdbjni Database Env Constants SeekOp GetOp]))
 
 (defrecord Txn [txn type])
 
@@ -174,35 +174,51 @@
      (get-many env db txn k))))
 
 (defn items
-  [env db txn]
-  (let [txn* (:txn txn)
-        entries (-> (get env db)
-                    (.iterate txn*)
-                    iterator-seq)]
-    (map
-     (fn [e]
-       [(.getKey e) (.getValue e)])
-     entries)))
+  ([env db txn]
+   (let [txn* (:txn txn)
+         entries (-> (get env db)
+                     (.iterate txn*)
+                     iterator-seq)]
+     (map
+      (fn [e]
+        [(.getKey e) (.getValue e)])
+      entries)))
+  ([env db]
+   (with-txn [txn (read-txn env)]
+     (items env db txn))))
+
+(defn keys!
+  ([env db txn]
+   (let [txn* (:txn txn)
+         entries (-> (get env db)
+                     (.iterate txn*)
+                     (iterator-seq))]
+     (map #(.getKey %) entries)))
+  ([env db]
+   (with-txn [txn (read-txn env)]
+     (keys! env db txn))))
 
 (defn items-from
-  [env db txn from]
-  (let [txn* (:txn txn)
-        entries (-> (get env db)
-                    (.seek txn*
-                           from)
-                    iterator-seq)]
-    (map
-     (fn [e]
-       [(.getKey e) (.getValue e)])
-     entries)))
+  ([env db txn from]
+   (let [txn* (:txn txn)
+         entries (-> (get env db)
+                     (.seek txn*
+                            from)
+                     iterator-seq)]
+     (map
+      (fn [e]
+        [(.getKey e) (.getValue e)])
+      entries)))
+  ([env db from]
+   (with-txn [txn (read-txn env)]
+     (items-from env db txn from))))
 
 (defn range!
   "Returns all the [key, value] pairs in the interval [start, end). If
   `db` supports duplicates, they are included in sorted order."
   ([env db txn start end]
    ;; FIXME: make this aware of sort-order directives (e.g. :integer-key)
-   (let [c (UnsignedBytes/lexicographicalComparator)
-         out #(let [buf (java.nio.ByteBuffer/wrap %)]
+   (let [out #(let [buf (java.nio.ByteBuffer/wrap %)]
                 (.getLong buf))]
      (->> (items-from env db txn start)
           ;; FIXME: This really doesn't like being lazy in its current
@@ -210,7 +226,7 @@
           ;; lazy-cat a series of chunked transactions together, but
           ;; that'll have to wait.
           (doall)
-          (take-while #(< (.compare c (first %) end) 0)))))
+          (take-while #(< (bs/compare-bytes (first %) end) 0)))))
   ([env db start end]
    (with-txn [txn (read-txn env)]
      (range! env db txn start end))))
