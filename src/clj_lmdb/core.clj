@@ -130,6 +130,28 @@
    (.get (get env db)
          k)))
 
+(defn first!
+  ([env db txn]
+   (-> (get env db)
+       (.iterate (:txn txn))
+       (iterator-seq)
+       (first)
+       (#(vector (.getKey %) (.getValue %)))))
+  ([env db]
+   (with-txn [txn (read-txn env)]
+     (first! env db txn))))
+
+(defn last!
+  ([env db txn]
+   (-> (get env db)
+       (.iterateBackward (:txn txn))
+       (iterator-seq)
+       (first)
+       (#(vector (.getKey %) (.getValue %)))))
+  ([env db]
+   (with-txn [txn (read-txn env)]
+     (last! env db txn))))
+
 ;; FIXME: Rename this fn. It's got a terrible name.
 ;; TODO: If the DB was created with :dup-fixed, then use GET_MULTIPLE
 ;; and NEXT_MULTIPLE GetOps to speed things up.

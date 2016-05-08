@@ -62,6 +62,9 @@
         (put! e :str-test (in n) (in n))
         (put! e :int-test (in n) (in n))
         (put! e :rev-test (in n) (in n)))
+      (is (= -123 (->> (in -123) (get! e :str-test) (out))))
+      (is (= -123 (->> (in -123) (get! e :int-test) (out))))
+      (is (= -123 (->> (in -123) (get! e :rev-test) (out))))
       (with-txn [txn (read-txn e)]
         (is (= [0 123 -123] (->> (items e :str-test txn)
                                  (map #(out (first %)))
@@ -74,7 +77,7 @@
                                  (vec)))))
       (cleanup)))
 
-  (testing "Duplicate keys are supported"
+  (testing "Fetching duplicate keys is supported"
     (let [e (env "/tmp"
                  :dbs {:control [:create]
                        :dup-test [:create :dup-sort]})
@@ -83,6 +86,8 @@
       (dotimes [n 10]
         (put! e :control (in "foo") (in (str n)))
         (put! e :dup-test (in "foo") (in (str n))))
+      (is (= "9" (->> (in "foo") (get! e :control) (out))))
+      (is (= "0" (->> (in "foo") (get! e :dup-test) (out))))
       (is (= 1 (count (get-many e :control (in "foo")))))
       (is (= 10 (count (get-many e :dup-test (in "foo")))))
       (cleanup)))
@@ -107,4 +112,19 @@
       (is (= (range 1 16)
              (->> (range! e :dups (in 1) (in 9))
                   (map #(out (second %))))))
+      (cleanup)))
+
+  (testing "Fetching the first and last values in a DB"
+    (let [e (env "/tmp")
+          in #(let [buf (java.nio.ByteBuffer/allocate Long/BYTES)]
+                (.putLong buf 0 %)
+                (.array buf))
+          out #(let [buf (java.nio.ByteBuffer/wrap %)]
+                 (.getLong buf))
+          keys [0 1 1 1 2 2 3 3 4 5 6 7 7 8 8 8 9]
+          vals [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16]]
+      (doseq [pair (map vector keys vals)]
+        (put! e :db (in (first pair)) (in (second pair))))
+      (is (= 0 (-> (first! e :db) (second) (out))))
+      (is (= 16 (-> (last! e :db) (second) (out))))
       (cleanup))))
