@@ -16,7 +16,6 @@
    :integer-data Constants/INTEGERDUP
    :reverse-data Constants/REVERSEDUP})
 
-;; FIXME: remove any marshaling here. wrong layer.
 (defn env
   "Initialize a new environment, optionally specifying the following
   parameters:
@@ -179,10 +178,11 @@
          entries (-> (get env db)
                      (.iterate txn*)
                      iterator-seq)]
-     (map
-      (fn [e]
-        [(.getKey e) (.getValue e)])
-      entries)))
+     (->> entries
+          (map
+           (fn [e]
+             [(.getKey e) (.getValue e)]))
+          (doall))))
   ([env db]
    (with-txn [txn (read-txn env)]
      (items env db txn))))
@@ -213,20 +213,27 @@
    (with-txn [txn (read-txn env)]
      (items-from env db txn from))))
 
+;; FIXME: compare-bytes uses big-endian comparison, whilst LMDB uses
+;; native byte order (usually little-endian).
+;; FIXME: make this aware of sort-order directives (e.g. :integer-key)
 (defn range!
   "Returns all the [key, value] pairs in the interval [start, end). If
   `db` supports duplicates, they are included in sorted order."
   ([env db txn start end]
-   ;; FIXME: make this aware of sort-order directives (e.g. :integer-key)
-   (let [out #(let [buf (java.nio.ByteBuffer/wrap %)]
-                (.getLong buf))]
+   (let [dne (-> end (reverse) (byte-array))]
      (->> (items-from env db txn start)
-          ;; FIXME: This really doesn't like being lazy in its current
-          ;; form. Transactions are timing out. We should really
-          ;; lazy-cat a series of chunked transactions together, but
-          ;; that'll have to wait.
-          (doall)
-          (take-while #(< (bs/compare-bytes (first %) end) 0)))))
+          ;; FIXME: All this byte order flipping must destroy
+          ;; performance...
+          (take-while #(-> %
+                           (first)
+                           (reverse)
+                           (byte-array)
+                           (bs/compare-bytes dne)
+                           (< 0))))))
   ([env db start end]
    (with-txn [txn (read-txn env)]
-     (range! env db txn start end))))
+     ;; FIXME: This really doesn't like being lazy in its current
+     ;; form. Transactions are timing out. We should really
+     ;; lazy-cat a series of chunked transactions together, but
+     ;; that'll have to wait.
+     (doall (range! env db txn start end)))))

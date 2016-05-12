@@ -37,7 +37,7 @@
                  :dbs {:test1 [:create]
                        :test2 [:create]
                        :test3 [:create]})]
-      (is (= 3 (-> e (keys) (set) (disj :_env :_marshal-fn :_unmarshal-fn) (count))))
+      (is (= 3 (-> e (keys) (set) (disj :_env) (count))))
       (is (= 0 (-> e :test1 (.stat) (.ms_entries))))
       (is (= 0 (-> e :test2 (.stat) (.ms_entries))))
       (is (= 0 (-> e :test3 (.stat) (.ms_entries))))
@@ -53,9 +53,11 @@
                        :int-test [:integer-key :create]
                        :rev-test [:reverse-key :create]})
           in #(let [buf (java.nio.ByteBuffer/allocate Long/BYTES)]
+                (.order buf (java.nio.ByteOrder/nativeOrder))
                 (.putLong buf 0 %)
                 (.array buf))
           out #(let [buf (java.nio.ByteBuffer/wrap %)]
+                 (.order buf (java.nio.ByteOrder/nativeOrder))
                  (.getLong buf))
           nums [-123 0 123]]
       (doseq [n nums]
