@@ -151,6 +151,9 @@
    (with-txn [txn (read-txn env)]
      (last! env db txn))))
 
+;; FIXME: Also write `first-for` and `last-for`, variants of `first!`
+;; and `last` that fetch the first and last dups for a given key.
+
 ;; FIXME: Rename this fn. It's got a terrible name.
 ;; TODO: If the DB was created with :dup-fixed, then use GET_MULTIPLE
 ;; and NEXT_MULTIPLE GetOps to speed things up.
@@ -162,10 +165,12 @@
   ([env db txn k]
    (let [cursor (.openCursor (get env db) (:txn txn))
          this (.seek cursor SeekOp/KEY k)
-         entries (loop [vals [(.getValue this)]]
-                   (if-let [n (.get cursor GetOp/NEXT_DUP)]
-                     (recur (conj vals (.getValue n)))
-                     vals))]
+         entries (if this
+                   (loop [vals [(.getValue this)]]
+                     (if-let [n (.get cursor GetOp/NEXT_DUP)]
+                       (recur (conj vals (.getValue n)))
+                       vals))
+                   [])]
      (.close cursor)
      entries))
   ([env db k]
@@ -193,7 +198,9 @@
          entries (-> (get env db)
                      (.iterate txn*)
                      (iterator-seq))]
-     (map #(.getKey %) entries)))
+     (->> entries
+          (map #(.getKey %))
+          (doall))))
   ([env db]
    (with-txn [txn (read-txn env)]
      (keys! env db txn))))

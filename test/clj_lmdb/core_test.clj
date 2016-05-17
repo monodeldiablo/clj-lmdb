@@ -1,11 +1,18 @@
 (ns clj-lmdb.core-test
   (:require [clojure.test :refer :all]
             [clj-lmdb.core :refer :all]
+            [gloss.core :refer :all]
+            [gloss.io :refer :all]
             [clojure.java.io :as io])
   (:import [org.fusesource.lmdbjni Constants]))
 
 ;; FIXME: write test fixtures for simple and complex DB setup/teardown
 ;; FIXME: test duplicate key support
+
+;; generate powers of two to test byte ordering/sorting
+(defn powers
+  ([] (powers 1))
+  ([x] (lazy-seq (cons x (powers (* 2 x))))))
 
 (defn cleanup []
   (io/delete-file "/tmp/data.mdb")
@@ -53,30 +60,35 @@
                        :int-test [:integer-key :create]
                        :rev-test [:reverse-key :create]})
           in #(let [buf (java.nio.ByteBuffer/allocate Long/BYTES)]
-                (.order buf (java.nio.ByteOrder/nativeOrder))
                 (.putLong buf 0 %)
                 (.array buf))
           out #(let [buf (java.nio.ByteBuffer/wrap %)]
-                 (.order buf (java.nio.ByteOrder/nativeOrder))
                  (.getLong buf))
-          nums [-123 0 123]]
+          nums (concat (->> (powers)
+                            (take 16)
+                            (reverse)
+                            (map #(* -1 %)))
+                       (take 16 (powers)))]
       (doseq [n nums]
+        (->> n (in) (map #(format "%2x" %)) (apply str) (#(println % n)))
         (put! e :str-test (in n) (in n))
         (put! e :int-test (in n) (in n))
         (put! e :rev-test (in n) (in n)))
-      (is (= -123 (->> (in -123) (get! e :str-test) (out))))
-      (is (= -123 (->> (in -123) (get! e :int-test) (out))))
-      (is (= -123 (->> (in -123) (get! e :rev-test) (out))))
+      (is (= -128 (->> (in -128) (get! e :str-test) (out))))
+      (is (= -128 (->> (in -128) (get! e :int-test) (out))))
+      (is (= -128 (->> (in -128) (get! e :rev-test) (out))))
       (with-txn [txn (read-txn e)]
-        (is (= [0 123 -123] (->> (items e :str-test txn)
-                                 (map #(out (first %)))
-                                 (vec))))
-        (is (= [-123 0 123] (->> (items e :int-test txn)
-                                 (map #(out (first %)))
-                                 (vec))))
-        (is (= [0 -123 123] (->> (items e :rev-test txn)
-                                 (map #(out (first %)))
-                                 (vec)))))
+        (is (= (concat (drop 16 nums)
+                       (take 16 nums))
+               (->> (items e :str-test txn)
+                    (map #(out (first %)))
+                    (vec))))
+        (is (= nums (->> (items e :int-test txn)
+                         (map #(out (first %)))
+                         (vec))))
+        (is (= (reverse nums) (->> (items e :rev-test txn)
+                                   (map #(out (first %)))
+                                   (vec)))))
       (cleanup)))
 
   (testing "Fetching duplicate keys is supported"
@@ -92,6 +104,8 @@
       (is (= "0" (->> (in "foo") (get! e :dup-test) (out))))
       (is (= 1 (count (get-many e :control (in "foo")))))
       (is (= 10 (count (get-many e :dup-test (in "foo")))))
+      (is (= 0 (count (get-many e :control (in "bar")))))
+      (is (= 0 (count (get-many e :dup-test (in "bar")))))
       (cleanup)))
 
   (testing "Ranges are supported"
