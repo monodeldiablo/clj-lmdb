@@ -66,18 +66,24 @@
           in #(let [buf (java.nio.ByteBuffer/allocate Long/BYTES)]
                 (.putLong buf 0 %)
                 (.array buf))
+          alt-in #(let [buf (java.nio.ByteBuffer/allocate Long/BYTES)]
+                    (.order buf (java.nio.ByteOrder/nativeOrder))
+                    (.putLong buf 0 %)
+                    (.array buf))
           out #(let [buf (java.nio.ByteBuffer/wrap %)]
                  (.getLong buf))
           nums (concat (->> (powers)
                             (take 16)
                             (reverse)
                             (map #(* -1 %)))
-                       (take 16 (powers)))]
+                       (take 16 (powers)))          ]
       (doseq [n nums]
         (hexdump n (in n))
         (put! e :str-test (in n) (in n))
         (put! e :int-test (in n) (in n))
         (put! e :rev-test (in n) (in n)))
+      (doseq [n nums]
+        (hexdump n (alt-in n)))
       (is (= -128 (->> (in -128) (get! e :str-test) (out))))
       (is (= -128 (->> (in -128) (get! e :int-test) (out))))
       (is (= -128 (->> (in -128) (get! e :rev-test) (out))))
@@ -137,17 +143,28 @@
                 (.array buf))
           out #(let [buf (java.nio.ByteBuffer/wrap %)]
                  (.getLong buf))
-          keys [0 1 1 1 2 2 3 3 4 5 6 7 7 8 8 8 9]
-          vals [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16]]
-      (doseq [pair (map vector keys vals)]
-        (put! e :no-dups (in (first pair)) (in (second pair)))
-        (put! e :dups (in (first pair)) (in (second pair))))
-      (is (= [3 5 7 8 9 10 12 15]
-             (->> (range! e :no-dups (in 1) (in 9))
-                  (map #(out (second %))))))
-      (is (= (range 1 16)
-             (->> (range! e :dups (in 1) (in 9))
-                  (map #(out (second %))))))
+          nums (concat (take 16 (powers))
+                       (->> (powers)
+                            (take 16)
+                            (reverse)
+                            (map #(* -1 %))))]
+      (doseq [k nums
+              v (range 0 10)]
+        (put! e :no-dups (in k) (in v))
+        (put! e :dups (in k) (in v)))
+      ;; validate sort order in the DB
+      (is (= (->> (items e :no-dups)
+                  (map #(out (first %))))
+             nums))
+      (is (= (for [k (->> nums (drop 1) (butlast) (butlast))]
+               [k 9])
+             (->> (range! e :no-dups (in (second nums)) (in (last (butlast nums))))
+                  (map #(vec (map out %))))))
+      (is (= (for [k (->> nums (drop 1) (butlast) (butlast))
+                   v (range 0 10)]
+               [k v])
+             (->> (range! e :dups (in (second nums)) (in (last (butlast nums))))
+                  (map #(vec (map out %))))))
       (cleanup)))
 
   (testing "Fetching the first and last values in a DB"

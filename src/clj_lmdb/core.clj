@@ -220,22 +220,26 @@
    (with-txn [txn (read-txn env)]
      (items-from env db txn from))))
 
-;; FIXME: compare-bytes uses big-endian comparison, whilst LMDB uses
-;; native byte order (usually little-endian).
+;; NOTE: compare-bytes uses big-endian comparison, whilst LMDB uses
+;; native byte order (usually little-endian). This'd be quicker if we
+;; used a comparator that could do native order instead of flipping
+;; everything.
+;; FIXME: This is slooooooooooow.
 ;; FIXME: make this aware of sort-order directives (e.g. :integer-key)
 (defn range!
   "Returns all the [key, value] pairs in the interval [start, end). If
   `db` supports duplicates, they are included in sorted order."
   ([env db txn start end]
-   (let [dne (-> end (reverse) (byte-array))]
+   (let [buf (doto (java.nio.ByteBuffer/wrap end)
+               (.order (java.nio.ByteOrder/nativeOrder)))
+         end (.array buf)]
      (->> (items-from env db txn start)
-          ;; FIXME: All this byte order flipping must destroy
-          ;; performance...
           (take-while #(-> %
                            (first)
-                           (reverse)
-                           (byte-array)
-                           (bs/compare-bytes dne)
+                           (java.nio.ByteBuffer/wrap)
+                           (.order (java.nio.ByteOrder/nativeOrder))
+                           (.array)
+                           (bs/compare-bytes end)
                            (< 0))))))
   ([env db start end]
    (with-txn [txn (read-txn env)]
