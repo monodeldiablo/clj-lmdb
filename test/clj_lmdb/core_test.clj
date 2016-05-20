@@ -4,7 +4,7 @@
             [gloss.core :refer :all]
             [gloss.io :refer :all]
             [clojure.java.io :as io])
-  (:import [org.fusesource.lmdbjni Constants]))
+  (:import [org.fusesource.lmdbjni Constants])  )
 
 ;; FIXME: write test fixtures for simple and complex DB setup/teardown
 ;; FIXME: test duplicate key support
@@ -13,6 +13,10 @@
 (defn powers
   ([] (powers 1))
   ([x] (lazy-seq (cons x (powers (* 2 x))))))
+
+(defn hexdump
+  [n b]
+  (->> b (map #(format " %02x" %)) (apply str) (#(println % n))))
 
 (defn cleanup []
   (io/delete-file "/tmp/data.mdb")
@@ -70,7 +74,7 @@
                             (map #(* -1 %)))
                        (take 16 (powers)))]
       (doseq [n nums]
-        (->> n (in) (map #(format "%2x" %)) (apply str) (#(println % n)))
+        (hexdump n (in n))
         (put! e :str-test (in n) (in n))
         (put! e :int-test (in n) (in n))
         (put! e :rev-test (in n) (in n)))
@@ -106,6 +110,22 @@
       (is (= 10 (count (get-many e :dup-test (in "foo")))))
       (is (= 0 (count (get-many e :control (in "bar")))))
       (is (= 0 (count (get-many e :dup-test (in "bar")))))
+      (cleanup)))
+
+  (testing "Fetching duplicate keys from a large DB is supported"
+    (let [e (env "/tmp"
+                 :dbs {:dup-test [:create :dup-sort]}
+                 :max-size (* 1 1024 1024 1024))
+          keys (range 0 10000)
+          in #(Constants/bytes (str %))
+          out #(Integer/parseInt (Constants/string %))]
+      (with-txn [txn (write-txn e)]
+        (doseq [k keys
+                v (range 10)]
+          (put! e :dup-test txn (in k) (in v))))
+      (with-txn [txn (read-txn e)]
+        (doseq [k keys]
+          (is (= 10 (count (get-many e :dup-test txn (in k)))))))
       (cleanup)))
 
   (testing "Ranges are supported"
