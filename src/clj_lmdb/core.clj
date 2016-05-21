@@ -155,9 +155,10 @@
   ([env db txn k]
    (let [cursor (.openCursor (get env db) (:txn txn))
          this (.seek cursor SeekOp/KEY k)
-         entry (.get cursor GetOp/LAST_DUP)]
+         v (when this
+             (.getValue (.get cursor GetOp/LAST_DUP)))]
      (.close cursor)
-     [(.getKey entry) (.getValue entry)]))
+     v))
   ([env db k]
    (with-txn [txn (read-txn env)]
      (last-dup env db txn k))))
