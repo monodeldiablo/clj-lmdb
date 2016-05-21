@@ -180,4 +180,25 @@
         (put! e :db (in (first pair)) (in (second pair))))
       (is (= 0 (-> (first! e :db) (second) (out))))
       (is (= 16 (-> (last! e :db) (second) (out))))
+      (cleanup)))
+
+  (testing "Fetching the last dup for a key"
+    (let [e (env "/tmp"
+                 :dbs {:dups [:create :dup-sort]})
+          in #(let [buf (java.nio.ByteBuffer/allocate Long/BYTES)]
+                (.putLong buf 0 %)
+                (.array buf))
+          out #(let [buf (java.nio.ByteBuffer/wrap %)]
+                 (.getLong buf))
+          keys [0 1 1 1 2 2 3 3 4 5 6 7 7 8 8 8 9]
+          vals [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16]]
+      (doseq [pair (map vector keys vals)]
+        (put! e :dups (in (first pair)) (in (second pair))))
+      (is (= 0 (-> (first! e :dups) (second) (out))))
+      (is (= 16 (-> (last! e :dups) (second) (out))))
+      (is (= 3 (-> (last-dup e :dups (in 1)) (second) (out))))
+      (is (= 5 (-> (last-dup e :dups (in 2)) (second) (out))))
+      (is (= 15 (-> (last-dup e :dups (in 8)) (second) (out))))
+      (is (= 0 (-> (last-dup e :dups (in 0)) (second) (out))))
+      (is (= 16 (-> (last-dup e :dups (in 9)) (second) (out))))
       (cleanup))))

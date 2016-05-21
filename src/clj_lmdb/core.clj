@@ -151,8 +151,16 @@
    (with-txn [txn (read-txn env)]
      (last! env db txn))))
 
-;; FIXME: Also write `first-for` and `last-for`, variants of `first!`
-;; and `last` that fetch the first and last dups for a given key.
+(defn last-dup
+  ([env db txn k]
+   (let [cursor (.openCursor (get env db) (:txn txn))
+         this (.seek cursor SeekOp/KEY k)
+         entry (.get cursor GetOp/LAST_DUP)]
+     (.close cursor)
+     [(.getKey entry) (.getValue entry)]))
+  ([env db k]
+   (with-txn [txn (read-txn env)]
+     (last-dup env db txn k))))
 
 ;; FIXME: Rename this fn. It's got a terrible name.
 ;; TODO: If the DB was created with :dup-fixed, then use GET_MULTIPLE
