@@ -100,6 +100,15 @@
     :else (throw (IllegalArgumentException.
                   "with-open only allows Symbols in bindings"))))
 
+(defn drop!
+  ([env db txn close?]
+   (.drop (get env db)
+          txn
+          close?))
+  ([env db close?]
+   (.drop (get env db)
+          close?)))
+
 (defn put!
   ([env db txn k v]
    (.put (get env db)
@@ -186,17 +195,42 @@
    (with-txn [txn (read-txn env)]
      (get-many env db txn k))))
 
+(defn get-n
+  "Get `n` values corresponding to key `k`. If `db` does not support
+  duplicates, it will return a vector containing a single value if
+  there is an entry for `k`. If `n` is negative or omitted, it will
+  fetch all the values."
+  ([env db txn k n]
+   (let [cursor (.openCursor (get env db) (:txn txn))
+         this (.seek cursor SeekOp/KEY k)
+         entries (if this
+                   (loop [count 0
+                          vals [(.getValue this)]]
+                     (if (> count n)
+                       (drop-last vals)
+                       (if-let [next (.get cursor GetOp/NEXT_DUP)]
+                         (recur (inc count)
+                                (conj vals (.getValue next)))
+                         vals)))
+                   [])]
+     (.close cursor)
+     entries))
+  ([env db k n]
+   (with-txn [txn (read-txn env)]
+     (get-n env db txn k n)))
+  ([env db k]
+   (get-n env db k -1)))
+
 (defn items
   ([env db txn]
    (let [txn* (:txn txn)
-         entries (-> (get env db)
-                     (.iterate txn*)
-                     iterator-seq)]
-     (->> entries
-          (map
-           (fn [e]
-             [(.getKey e) (.getValue e)]))
-          (doall))))
+         d (get env db)
+         entries (->> (.iterate d txn*)
+                      (iterator-seq)
+                      (map
+                       (fn [e]
+                         [(.getKey e) (.getValue e)])))]
+     entries))
   ([env db]
    (with-txn [txn (read-txn env)]
      (items env db txn))))
@@ -208,8 +242,7 @@
                      (.iterate txn*)
                      (iterator-seq))]
      (->> entries
-          (map #(.getKey %))
-          (doall))))
+          (map #(.getKey %)))))
   ([env db]
    (with-txn [txn (read-txn env)]
      (keys! env db txn))))
