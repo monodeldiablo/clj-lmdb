@@ -16,6 +16,13 @@
    :integer-data Constants/INTEGERDUP
    :reverse-data Constants/REVERSEDUP})
 
+(defn- mk-db
+  [env db-name config]
+  (.openDatabase env
+                 (name db-name)
+                 (->> (map db-flags config)
+                      (apply bit-or 0 0))))
+
 (defn env
   "Initialize a new environment, optionally specifying the following
   parameters:
@@ -55,19 +62,18 @@
               (.open dir-path
                      (->> (map env-flags flags)
                           (apply bit-or 0 0))))
-        env-map {:_env env}]
+        env-map {:_env env
+                 :_config dbs}]
     (if (> num-dbs 0)
       (do
-        (reduce (fn [e [db-name config]]
-                  (assoc e
-                         db-name
-                         (.openDatabase env
-                                        (name db-name)
-                                        (->> (map db-flags config)
-                                             (apply bit-or 0 0)))))
-                env-map
-                dbs))
-      (assoc env-map :db (.openDatabase env)))))
+        (transient
+         (reduce (fn [e [db-name config]]
+                   (assoc e
+                          db-name
+                          (mk-db env db-name config)))
+                 env-map
+                 dbs)))
+      (transient (assoc env-map :db (.openDatabase env))))))
 
 (defn read-txn
   [env]
@@ -100,14 +106,27 @@
     :else (throw (IllegalArgumentException.
                   "with-open only allows Symbols in bindings"))))
 
+;; NOTE: Not closing the DB leaves it hanging around, using up
+;; space. Call `.drop` with `close` set to true, then recreate an
+;; empty DB with the same name.
 (defn drop!
-  ([env db txn close?]
+  ([env db txn]
    (.drop (get env db)
           txn
-          close?))
-  ([env db close?]
+          true)
+   (assoc! env
+           db
+           (mk-db (get env :_env)
+                  db
+                  (get-in env [:_config db]))))
+  ([env db]
    (.drop (get env db)
-          close?)))
+          true)
+   (assoc! env
+           db
+           (mk-db (get env :_env)
+                  db
+                  (get-in env [:_config db])))))
 
 (defn put!
   ([env db txn k v]

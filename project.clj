@@ -1,4 +1,4 @@
-(defproject clj-lmdb "0.3.3"
+(defproject clj-lmdb "0.3.4"
   :description "Clojure bindings for lmdb"
   :url "http://github.com/shriphani/clj-lmdb"
   :license {:name "Eclipse Public License"
