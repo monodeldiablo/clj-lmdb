@@ -225,7 +225,9 @@
          entries (if this
                    (loop [count 0
                           vals [(.getValue this)]]
-                     (if (> count n)
+                     (if (and n
+                              (> n 0)
+                              (> count n))
                        (drop-last vals)
                        (if-let [next (.get cursor GetOp/NEXT_DUP)]
                          (recur (inc count)
@@ -239,6 +241,37 @@
      (get-n env db txn k n)))
   ([env db k]
    (get-n env db k -1)))
+
+(defn page
+  "Retrieve at most `n` items from the given database, starting after
+  `start-key`. If `start-key` is nil, then start at the first item."
+  ([env db txn start-key n]
+   (let [cursor (.openCursor (get env db) (:txn txn))
+         start (if start-key
+                 (do
+                   (.seek cursor SeekOp/KEY start-key)
+                   ;; skip one past start-key
+                   (.get cursor GetOp/NEXT_NODUP))
+                 (.get cursor GetOp/FIRST))
+         buffer (if start
+                  (loop [count 1
+                         ;; FIXME: make this an object array for speed
+                         buf [[(.getKey start)
+                               (.getValue start)]]]
+                    ;; FIXME: There should be a :dup and :nodup mode!
+                    (let [next (.get cursor GetOp/NEXT_NODUP)]
+                      (if (and next
+                               (< count n))
+                        (recur (inc count)
+                               (conj buf [(.getKey next)
+                                          (.getValue next)]))
+                        buf)))
+                  [])]
+     (.close cursor)
+     buffer))
+  ([env db start-key n]
+   (with-txn [txn (read-txn env)]
+     (page env db txn start-key n))))
 
 (defn items
   ([env db txn]
