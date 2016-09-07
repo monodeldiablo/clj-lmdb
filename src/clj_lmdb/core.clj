@@ -106,27 +106,19 @@
     :else (throw (IllegalArgumentException.
                   "with-open only allows Symbols in bindings"))))
 
-;; NOTE: Not closing the DB leaves it hanging around, using up
-;; space. Call `.drop` with `close` set to true, then recreate an
-;; empty DB with the same name.
+;; NOTE: There seems to be an issue with the 'delete' option in LMDB's
+;; 'drop' command. As a result, dropped databases continue to use up
+;; RAM, but are no longer reachable. Disaster. So I just wipe all the
+;; data in a give DB instead.
 (defn drop!
   ([env db txn]
-   (.drop (get env db)
-          txn
-          true)
-   (assoc! env
-           db
-           (mk-db (get env :_env)
-                  db
-                  (get-in env [:_config db]))))
+   (let [cursor (.openCursor (get env db) (:txn txn))]
+     (while (.get cursor GetOp/FIRST)
+       (.delete cursor))
+     (.close cursor))   )
   ([env db]
-   (.drop (get env db)
-          true)
-   (assoc! env
-           db
-           (mk-db (get env :_env)
-                  db
-                  (get-in env [:_config db])))))
+   (with-txn [txn (write-txn env)]
+     (drop! env db txn))))
 
 (defn put!
   ([env db txn k v]
@@ -147,6 +139,22 @@
   ([env db k]
    (.delete (get env db)
             k)))
+
+;; Remove a row from a dup-supporting DB. This has terrible
+;; performance for rows with lots of dups.
+(defn delete-row!
+  ([env db txn k v]
+   (let [cursor (.openCursor (get env db) (:txn txn))]
+     (when-let [row-key (.seek cursor SeekOp/KEY k)]
+       (loop [this row-key]
+         (when this
+           (if (bs/bytes= v (.getValue this))
+             (.delete cursor)
+             (recur (.get cursor GetOp/NEXT_DUP))))))
+     (.close cursor)))
+  ([env db k v]
+   (with-txn [txn (write-txn env)]
+     (delete-row! env db txn k v))))
 
 (defn get!
   ([env db txn k]
@@ -241,6 +249,21 @@
      (get-n env db txn k n)))
   ([env db k]
    (get-n env db k -1)))
+
+(defn get-count
+  "Get the number of duplicate values corresponding to key `k`. If
+  `db` does not support duplicates, it will return 1 if there is an
+  entry for `k`. If there is no corresponding key, then this will
+  return 0."
+  ([env db txn k]
+   (let [cursor (.openCursor (get env db) (:txn txn))
+         this (.seek cursor SeekOp/KEY k)
+         c (.count cursor)]
+     (.close cursor)
+     c))
+  ([env db k]
+   (with-txn [txn (read-txn env)]
+     (get-count env db txn k))))
 
 (defn page
   "Retrieve at most `n` items from the given database, starting after
